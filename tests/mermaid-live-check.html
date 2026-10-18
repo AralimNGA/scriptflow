@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"><title>Mermaid-Validierung (nur Test, braucht Internet)</title>
+<style>body{font-family:sans-serif;margin:20px} .res{padding:8px 12px;margin:8px 0;border-radius:8px}
+.ok{background:#e9f7ef} .fail{background:#ffe5e5} pre{font-size:11px;max-height:160px;overflow:auto;background:#f4f4f4;padding:8px}
+.d{border:1px solid #ddd;margin:10px 0;padding:10px}</style>
+</head>
+<body>
+<h1 id="verdict">Mermaid-Validierung läuft…</h1>
+<div id="out"></div>
+<script src="../js/parser.js"></script>
+<script src="../js/mermaid.js"></script>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
+const SCRIPTS = {
+ 'ex1 einfach': `$q = Read-Host "Ordner?"\nif (Test-Path $q) { Copy-Item $q "C:\\B" -Recurse\nWrite-Host "ok" } else { Write-Host "fehlt" }\nWrite-Host "fertig"`,
+ 'ex3 komplex': `function Zeige-Menu {\n Write-Host "1"\n}\nfunction Pruefe-Dienste {\n $d = Get-Service | Where-Object { $_.Status -eq "Stopped" }\n foreach ($x in $d) { Write-Host "Gestoppt: $($x.Name)" }\n}\ndo {\n Zeige-Menu\n $wahl = Read-Host "Wahl"\n switch ($wahl) {\n  "1" { Pruefe-Dienste }\n  "2" { try { Remove-Item "$env:TEMP\\*" -Recurse -ErrorAction Stop\n Write-Host "geleert" } catch { Write-Host "Fehler!" } }\n  default { Write-Host "Ungueltig" }\n }\n} until ($wahl -eq "3")`,
+ 'jumps': `foreach ($f in $l) {\n if ($f -eq 1) { break }\n if ($f -eq 2) { continue }\n}\nif ($x) { return }\nexit 1`,
+ 'nasty labels': `[int]$x = 5\n$arr[0] = "#quot; und # Zeichen"\nswitch ($wahl) {\n "(a|b) {x}" { Write-Host "a" }\n "(sonstiges)" { Write-Host "b" }\n default { Write-Host "c" }\n}\ntry { $y = 1 } catch [System.IO.IOException] { Write-Host "io" }`
+};
+const out = document.getElementById('out');
+let fails = 0, total = 0;
+for (const [name, src] of Object.entries(SCRIPTS)) {
+  const { script } = PSViz.parse(src);
+  const bodies = [['Haupt', script.body, 'Start'], ...script.functions.map(f => ['Fn ' + f.name, f.body, 'Start: ' + f.name])];
+  for (const [label, body, title] of bodies) {
+    total++;
+    const code = PSViz.toMermaid(body, { title });
+    const box = document.createElement('div'); box.className = 'd';
+    box.innerHTML = '<b>' + name + ' / ' + label + '</b><pre></pre><div class="res"></div><div class="svg"></div>';
+    box.querySelector('pre').textContent = code;
+    out.appendChild(box);
+    try {
+      const { svg } = await mermaid.render('m' + total, code);
+      box.querySelector('.svg').innerHTML = svg;
+      box.querySelector('.res').textContent = 'PARSE OK ✓'; box.querySelector('.res').className = 'res ok';
+    } catch (e) {
+      fails++;
+      box.querySelector('.res').textContent = 'FEHLER: ' + e.message; box.querySelector('.res').className = 'res fail';
+    }
+  }
+}
+document.getElementById('verdict').textContent = fails === 0
+  ? 'ALLE ' + total + ' MERMAID-DIAGRAMME GÜLTIG ✓' : fails + ' von ' + total + ' FEHLGESCHLAGEN ✗';
+</script>
+</body>
+</html>

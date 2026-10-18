@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScriptFlow – PowerShell → Diagramm</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --panel2:#eef0f3; --border:#d8dce2;
+    --ink:#1d1d1f; --sub:#6e6e73; --accent:#0a84ff; --accent-ink:#ffffff;
+    --warn-bg:#fff6e5; --warn-ink:#8a5a00; --code-bg:#ffffff;
+    --st:#b03a2e; --cm:#8e8e93; --vr:#8e44ad; --kw:#0a5dc2; --fn:#0a7a5c; --op:#a15c00; --nu:#5856d6;
+    --sel:#0a84ff22;
+  }
+  [data-theme="dark"]{
+    --bg:#161719; --panel:#1f2124; --panel2:#26282c; --border:#3a3d42;
+    --ink:#e8e8ea; --sub:#9a9aa0; --accent:#0a84ff; --accent-ink:#ffffff;
+    --warn-bg:#3a2e12; --warn-ink:#ffd60a; --code-bg:#1a1b1e;
+    --st:#ff8a80; --cm:#7c7c82; --vr:#d0a9f5; --kw:#6cb2ff; --fn:#5fd4a7; --op:#ffb86c; --nu:#b8b5ff;
+    --sel:#0a84ff33;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:-apple-system, "Helvetica Neue", Arial, sans-serif;
+    background:var(--bg); color:var(--ink); display:flex; flex-direction:column; overflow:hidden;
+  }
+  /* ---------- Header ---------- */
+  header{
+    display:flex; align-items:center; gap:10px; padding:8px 14px;
+    background:var(--panel); border-bottom:1px solid var(--border); flex-wrap:wrap;
+  }
+  .logo{font-weight:700; font-size:16px; letter-spacing:-.2px; display:flex; align-items:center; gap:8px;}
+  .logo .mark{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#0a84ff,#5e5ce6);
+    display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800;}
+  .logo small{font-weight:400;color:var(--sub);font-size:12px;}
+  header .spacer{flex:1;}
+  select,input[type=text]{
+    background:var(--panel2); color:var(--ink); border:1px solid var(--border);
+    border-radius:8px; padding:6px 10px; font-size:13px; font-family:inherit; outline:none;
+  }
+  input[type=text]{width:250px;}
+  input[type=text]:focus,select:focus{border-color:var(--accent);}
+  button{
+    background:var(--panel2); color:var(--ink); border:1px solid var(--border);
+    border-radius:8px; padding:6px 12px; font-size:13px; cursor:pointer; font-family:inherit;
+    display:inline-flex;align-items:center;gap:6px;
+  }
+  button:hover{border-color:var(--accent); color:var(--accent);}
+  button.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+  button.primary:hover{filter:brightness(1.1); color:var(--accent-ink);}
+  button.mini{padding:3px 9px; font-size:12px; border-radius:6px;}
+  /* ---------- Layout ---------- */
+  main{flex:1; display:flex; min-height:0;}
+  #editorPane{
+    width:42%; min-width:320px; display:flex; flex-direction:column;
+    border-right:1px solid var(--border); background:var(--code-bg);
+  }
+  .paneTitle{
+    padding:7px 12px; font-size:12px; font-weight:600; color:var(--sub);
+    border-bottom:1px solid var(--border); background:var(--panel);
+    display:flex; align-items:center; gap:8px;
+  }
+  #editorWrap{flex:1; display:flex; min-height:0; position:relative; font:13px/1.55 ui-monospace,"SF Mono",Menlo,Consolas,monospace;}
+  #gutter{
+    width:46px; overflow:hidden; text-align:right; padding:10px 8px 10px 0; color:var(--sub);
+    background:var(--panel2); border-right:1px solid var(--border); user-select:none; flex:none;
+    font:inherit;
+  }
+  #gutter div{height:20.15px;}
+  #gutter div.hit{background:var(--sel); color:var(--accent); font-weight:700; border-radius:4px;}
+  #codeStack{flex:1; position:relative; min-width:0;}
+  #hlLayer,#code{
+    position:absolute; inset:0; padding:10px 12px; font:inherit; white-space:pre; overflow:auto;
+    tab-size:4;
+  }
+  #hlLayer{pointer-events:none; color:var(--ink);}
+  #hlLayer span.st{color:var(--st);} #hlLayer span.cm{color:var(--cm);font-style:italic;}
+  #hlLayer span.vr{color:var(--vr);} #hlLayer span.kw{color:var(--kw);font-weight:600;}
+  #hlLayer span.fn{color:var(--fn);} #hlLayer span.op{color:var(--op);} #hlLayer span.nu{color:var(--nu);}
+  #code{
+    background:transparent; color:transparent; caret-color:var(--ink); border:none; outline:none; resize:none;
+  }
+  #code::selection{background:var(--sel); color:transparent;}
+  /* ---------- Right pane ---------- */
+  #viewPane{flex:1; display:flex; flex-direction:column; min-width:0;}
+  #tabs{display:flex; gap:2px; background:var(--panel); border-bottom:1px solid var(--border); padding:0 10px; align-items:center; flex-wrap:wrap;}
+  .tab{
+    padding:9px 10px; font-size:13px; cursor:pointer; border:none; background:none; color:var(--sub);
+    border-bottom:2px solid transparent; border-radius:0; white-space:nowrap;
+  }
+  .tab:hover{color:var(--ink);}
+  .tab.active{color:var(--accent); border-bottom-color:var(--accent); font-weight:600;}
+  #modeBox{display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-left:14px;}
+  .modeBtn{border:none; border-radius:0; padding:5px 11px; font-size:12px; background:var(--panel2); color:var(--sub); cursor:pointer;}
+  .modeBtn:hover{color:var(--ink);}
+  .modeBtn.active{background:var(--accent); color:#fff;}
+  #zoomBox{margin-left:auto; display:flex; gap:4px; align-items:center; padding:4px 0;}
+  #zoomVal{font-size:12px; color:var(--sub); width:44px; text-align:center;}
+  #view{flex:1; overflow:auto; padding:18px;}
+  .chartcard{
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    margin:0 auto 18px auto; max-width:fit-content; min-width:min(680px,100%); overflow:hidden;
+  }
+  .chartcard .cardHead{
+    display:flex; align-items:center; gap:10px; padding:8px 12px;
+    border-bottom:1px solid var(--border); background:var(--panel2);
+  }
+  .cardHead .name{font-size:13px; font-weight:600;}
+  .cardHead .param{font-size:11.5px; color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:340px;}
+  .cardHead .grow{flex:1;}
+  .cardBody{padding:14px; overflow:auto; background:#ffffff; text-align:center;}
+  .cardBody svg{display:inline-block;}
+  .cardBody svg .nd:hover{opacity:.75;}
+  /* mermaid tab */
+  .mmcard{background:var(--panel); border:1px solid var(--border); border-radius:12px; margin:0 auto 18px auto; max-width:900px;}
+  .mmcard pre{
+    padding:12px 14px; overflow:auto; font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace;
+    color:var(--ink); max-height:420px; text-align:left; white-space:pre;
+  }
+  .descBody{padding:10px 18px 12px 18px; font-size:13px; line-height:1.7; color:var(--ink);}
+  .descBody ul{margin:0 0 0 16px;}
+  .hintbox{
+    max-width:900px; margin:0 auto 16px auto; background:var(--warn-bg); color:var(--warn-ink);
+    border-radius:10px; padding:10px 14px; font-size:12.5px; line-height:1.5;
+  }
+  .hintbox.blue{background:color-mix(in srgb, var(--accent) 12%, var(--panel)); color:var(--ink);}
+  /* ---------- Statusbar ---------- */
+  footer{
+    display:flex; align-items:center; gap:14px; padding:5px 14px; font-size:12px; color:var(--sub);
+    background:var(--panel); border-top:1px solid var(--border); min-height:30px; flex-wrap:wrap;
+  }
+  #warnBadge{color:var(--warn-ink); background:var(--warn-bg); padding:2px 9px; border-radius:20px; display:none;}
+  /* ---------- Modal ---------- */
+  dialog{
+    border:none; border-radius:14px; padding:0; background:var(--panel); color:var(--ink);
+    max-width:640px; width:92vw; box-shadow:0 24px 70px rgba(0,0,0,.35);
+  }
+  dialog::backdrop{background:rgba(0,0,0,.45);}
+  .modalHead{display:flex; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border); font-weight:700;}
+  .modalHead .grow{flex:1;}
+  .modalBody{padding:16px 18px; font-size:13.5px; line-height:1.6; max-height:70vh; overflow:auto;}
+  .modalBody h4{margin:14px 0 6px 0; font-size:13px;}
+  .modalBody ul{margin:4px 0 8px 18px;}
+  .modalBody .legendWrap{background:#fff; border-radius:10px; padding:10px; text-align:center; border:1px solid var(--border);}
+  .toast{
+    position:fixed; bottom:46px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--bg); padding:8px 18px; border-radius:20px; font-size:13px;
+    opacity:0; transition:opacity .25s; pointer-events:none; z-index:99;
+  }
+  .toast.show{opacity:1;}
+  #emptyMsg{color:var(--sub); text-align:center; margin-top:60px; font-size:14px; line-height:1.7;}
+</style>
+</head>
+<body data-theme="dark">
+
+<header>
+  <div class="logo"><span class="mark">&gt;_</span>ScriptFlow <small>PowerShell → Diagramm</small></div>
+  <select id="exampleSel" title="Beispiel-Scripts laden">
+    <option value="">Beispiele…</option>
+    <option value="ex1">1 · Einfacher Ablauf (if/else)</option>
+    <option value="ex2">2 · Schleifen &amp; Funktion</option>
+    <option value="ex3">3 · Menü, switch &amp; try/catch</option>
+    <option value="blank">Leeres Script</option>
+  </select>
+  <input type="text" id="captionInp" placeholder="Beschriftung für den Export, z. B. «Abb. 1: Backup-Script»">
+  <div class="spacer"></div>
+  <button id="helpBtn" title="Symbole &amp; Tipps">? Hilfe</button>
+  <button id="themeBtn" title="Hell/Dunkel">◐</button>
+</header>
+
+<main>
+  <section id="editorPane">
+    <div class="paneTitle">POWERSHELL-SCRIPT <span style="font-weight:400">(einfügen oder tippen – Diagramm aktualisiert sich live)</span></div>
+    <div id="editorWrap">
+      <div id="gutter"></div>
+      <div id="codeStack">
+        <pre id="hlLayer"></pre>
+        <textarea id="code" spellcheck="false" autocomplete="off" autocapitalize="off" wrap="off"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section id="viewPane">
+    <div id="tabs">
+      <button class="tab active" data-tab="flow">Flussdiagramm</button>
+      <button class="tab" data-tab="struk">Struktogramm</button>
+      <button class="tab" data-tab="mermaid">Mermaid-Code</button>
+      <div id="modeBox" title="Detailgrad: «Einfach» übersetzt Befehle in verständliches Deutsch und fasst zusammen">
+        <button class="modeBtn" data-mode="detail">Detailliert</button>
+        <button class="modeBtn" data-mode="einfach">Einfach</button>
+      </div>
+      <div id="zoomBox">
+        <button class="mini" id="zoomOut">−</button>
+        <span id="zoomVal">100%</span>
+        <button class="mini" id="zoomIn">+</button>
+        <button class="mini" id="zoomFit" title="Auf Breite einpassen">Einpassen</button>
+      </div>
+    </div>
+    <div id="view"></div>
+  </section>
+</main>
+
+<footer>
+  <span id="stats"></span>
+  <span id="warnBadge"></span>
+  <span style="flex:1"></span>
+  <span>Tipp: Klick auf eine Form im Diagramm markiert die Code-Zeile.</span>
+</footer>
+
+<dialog id="helpDlg">
+  <div class="modalHead">Symbole &amp; Tipps für die Doku <div class="grow"></div>
+    <button class="mini" onclick="helpDlg.close()">Schliessen</button></div>
+  <div class="modalBody">
+    <div class="legendWrap" id="legendWrap"></div>
+    <div style="text-align:right; margin-top:6px;">
+      <button class="mini" id="legendPngBtn">Legende als PNG herunterladen</button>
+    </div>
+    <h4>So kommt das Diagramm in deine Dokumentation</h4>
+    <ul>
+      <li><b>PNG</b> herunterladen und in Word/OneNote einfügen – am besten mit Beschriftung («Abbildung 1: …»), die du oben im Feld setzen kannst.</li>
+      <li><b>SVG</b> ist verlustfrei skalierbar – gut für Web-Dokus oder wenn du stark zoomen willst.</li>
+      <li><b>Mermaid-Code</b> ist die <i>bearbeitbare</i> Variante: in <b>draw.io</b> importieren (Extras → Einfügen → Erweitert → Mermaid), auf <b>mermaid.live</b> öffnen oder direkt in Markdown/Obsidian/GitLab einbetten. Ändert sich dein Script, einfach neu generieren.</li>
+    </ul>
+    <h4>Welche Darstellung wofür?</h4>
+    <ul>
+      <li><b>Flussdiagramm</b> (nach DIN 66001): zeigt den Ablauf mit Verzweigungen und Schleifen als Pfeile – gut für Abläufe mit vielen Entscheidungen.</li>
+      <li><b>Struktogramm</b> (Nassi-Shneiderman): kompakt, ohne Pfeile, zeigt die Verschachtelung – gut für strukturierte Programme und beliebt in Prüfungen.</li>
+    </ul>
+    <h4>Tastatur</h4>
+    <ul><li>Diagramm-Zoom: Knöpfe oben rechts oder <kbd>⌘</kbd>+Mausrad über dem Diagramm.</li></ul>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/parser.js"></script>
+<script src="js/flowchart.js"></script>
+<script src="js/struktogramm.js"></script>
+<script src="js/mermaid.js"></script>
+<script>
+'use strict';
+/* ===================== Beispiele ===================== */
+const EXAMPLES = {
+ex1:`# Einfaches Backup-Script
+$quelle = Read-Host "Welchen Ordner sichern?"
+$ziel   = "C:\\Backup"
+
+if (Test-Path $quelle) {
+    Copy-Item $quelle $ziel -Recurse
+    Write-Host "Backup wurde erstellt!"
+}
+else {
+    Write-Host "Ordner nicht gefunden!"
+}
+
+Write-Host "Script beendet."`,
+ex2:`# Grosse Dateien finden und protokollieren
+param([string]$Pfad = "C:\\Daten", [int]$LimitMB = 100)
+
+# Schreibt eine Zeile mit Uhrzeit ins Logfile
+function Schreibe-Log {
+    param([string]$Text)
+    $zeit = Get-Date -Format "HH:mm:ss"
+    Add-Content -Path "C:\\Logs\\scan.log" -Value "$zeit $Text"
+}
+
+# Alle Dateien im Ordner einlesen
+$dateien = Get-ChildItem -Path $Pfad -Recurse -File
+$anzahl  = 0
+
+foreach ($datei in $dateien) {
+    $groesseMB = $datei.Length / 1MB
+    # Ist die Datei zu gross?
+    if ($groesseMB -gt $LimitMB) {
+        Schreibe-Log "Grosse Datei: $($datei.FullName)"
+        $anzahl = $anzahl + 1
+    }
+}
+
+Write-Host "$anzahl grosse Dateien gefunden."`,
+ex3:`# Wartungs-Menü mit Fehlerbehandlung
+function Zeige-Menu {
+    Write-Host "1 = Dienste pruefen"
+    Write-Host "2 = Temp aufraeumen"
+    Write-Host "3 = Beenden"
+}
+
+function Pruefe-Dienste {
+    $dienste = Get-Service | Where-Object { $_.Status -eq "Stopped" }
+    foreach ($d in $dienste) {
+        Write-Host "Gestoppt: $($d.Name)"
+    }
+}
+
+do {
+    Zeige-Menu
+    $wahl = Read-Host "Deine Wahl"
+
+    switch ($wahl) {
+        "1" { Pruefe-Dienste }
+        "2" {
+            try {
+                Remove-Item "$env:TEMP\\*" -Recurse -ErrorAction Stop
+                Write-Host "Temp geleert."
+            }
+            catch {
+                Write-Host "Fehler beim Loeschen!"
+            }
+        }
+        "3" { Write-Host "Tschuess!" }
+        default { Write-Host "Ungueltige Eingabe" }
+    }
+} until ($wahl -eq "3")`
+};
+
+/* ===================== DOM refs ===================== */
+const $ = id => document.getElementById(id);
+const code = $('code'), hlLayer = $('hlLayer'), gutter = $('gutter'), view = $('view');
+const captionInp = $('captionInp'), statsEl = $('stats'), warnBadge = $('warnBadge');
+let activeTab = 'flow';
+let zoom = 1, userZoomed = false;
+let lastParse = null;
+let mode = 'detail';   /* 'detail' | 'einfach' */
+let commentInfo = { map: {}, title: '' };   /* Kommentare aus dem Script: Zeile → Text */
+
+/* ===================== Persistenz ===================== */
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem('scriptflow.'+k); return v===null? d : v; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('scriptflow.'+k, v); }catch(e){} }
+};
+
+/* ===================== Editor: Highlight + Gutter ===================== */
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+const HLRX = /("(?:""|`"|[^"])*")|('(?:''|[^'])*')|(<#[\s\S]*?#>|#[^\n]*)|(\$\{[^}\n]+\}|\$\w+|\$[$?^_])|\b(if|elseif|else|foreach|for|while|do|until|switch|function|param|return|break|continue|exit|throw|try|catch|finally|in|default|begin|process|end)\b|([A-Za-z]\w*-[A-Za-z]\w*)|(-\w+)|(\b\d+(?:\.\d+)?\b)/gi;
+function highlight(src){
+  let out = '', last = 0, m;
+  HLRX.lastIndex = 0;
+  while((m = HLRX.exec(src))){
+    out += esc(src.slice(last, m.index));
+    let cls = 'nu';
+    if(m[1]!==undefined || m[2]!==undefined) cls='st';
+    else if(m[3]!==undefined) cls='cm';
+    else if(m[4]!==undefined) cls='vr';
+    else if(m[5]!==undefined) cls='kw';
+    else if(m[6]!==undefined) cls='fn';
+    else if(m[7]!==undefined) cls='op';
+    out += '<span class="'+cls+'">'+esc(m[0])+'</span>';
+    last = HLRX.lastIndex;
+  }
+  return out + esc(src.slice(last));
+}
+function refreshEditorChrome(){
+  hlLayer.innerHTML = highlight(code.value) + '\n';
+  const n = code.value.split('\n').length;
+  if(gutter.childElementCount !== n){
+    let h = '';
+    for(let i=1;i<=n;i++) h += '<div>'+i+'</div>';
+    gutter.innerHTML = h;
+  }
+  syncScroll();
+}
+function syncScroll(){
+  hlLayer.scrollTop = code.scrollTop; hlLayer.scrollLeft = code.scrollLeft;
+  gutter.scrollTop = code.scrollTop;
+}
+code.addEventListener('scroll', syncScroll);
+code.addEventListener('keydown', e => {
+  if(e.key === 'Tab'){
+    e.preventDefault();
+    const s = code.selectionStart, t = code.selectionEnd;
+    code.value = code.value.slice(0,s) + '    ' + code.value.slice(t);
+    code.selectionStart = code.selectionEnd = s+4;
+    onEdit();
+  }
+});
+function jumpToLine(n){
+  const lines = code.value.split('\n');
+  if(n < 1 || n > lines.length) return;
+  let start = 0;
+  for(let i=0;i<n-1;i++) start += lines[i].length + 1;
+  code.focus();
+  code.setSelectionRange(start, start + lines[n-1].length);
+  code.scrollTop = Math.max(0, (n-1)*20.15 - code.clientHeight/2);
+  [...gutter.children].forEach((d,i)=> d.classList.toggle('hit', i===n-1));
+  setTimeout(()=> { const d = gutter.children[n-1]; if(d) d.classList.remove('hit'); }, 2200);
+}
+view.addEventListener('click', e => {
+  const nd = e.target.closest('.nd');
+  if(nd && nd.dataset.line) jumpToLine(parseInt(nd.dataset.line,10));
+});
+
+/* ===================== Kommentare aus dem Script ziehen ===================== */
+function extractComments(src){
+  const clean = src.replace(/<#[\s\S]*?#>/g, m => m.replace(/[^\n]/g, ' '));
+  const lines = clean.split('\n');
+  const map = {}; let pending = []; let title = ''; let sawCode = false;
+  for(let i = 0; i < lines.length; i++){
+    const L = lines[i].trim();
+    const full = L.match(/^#\s*(.*)$/);
+    if(full){ if(full[1].trim()) pending.push(full[1].trim()); continue; }
+    if(!L){ if(!sawCode && pending.length) title = pending.join(' – '); pending = []; continue; }
+    const stripped = L.replace(/"(?:""|`"|[^"])*"|'(?:''|[^'])*'/g, m => ' '.repeat(m.length));
+    const hi = stripped.indexOf('#');
+    const inline = hi >= 0 ? L.slice(hi + 1).trim() : '';
+    if(!sawCode && pending.length && i <= 3){ title = pending.join(' – '); pending = []; }
+    const txt = pending.concat(inline ? [inline] : []).join(' – ');
+    if(txt) map[i + 1] = txt;
+    pending = []; sawCode = true;
+  }
+  if(!sawCode && pending.length) title = pending.join(' – ');
+  return { map, title };
+}
+
+/* ===================== Auto-Beschreibung («Was macht dieses Script?») ===================== */
+function innerSteps(body){
+  const parts = [];
+  for(const st of body || []){
+    const x = sentenceFor(st, 1);
+    if(x){ parts.push(x); if(parts.length >= 2) break; }
+  }
+  return parts.length ? ' – dabei: ' + parts.join('; ') : '';
+}
+function sentenceFor(st, depth){
+  switch(st.type){
+    case 'process':
+      if(st.io === 'input'){
+        const s = firstString(st.text), v = (st.text.match(/^(\$\w+)\s*=/) || [])[1];
+        return 'fragt ' + (s ? '«' + s + '»' : 'eine Eingabe') + ' ab' + (v ? ' (→ ' + v + ')' : '');
+      }
+      if(st.io === 'output'){
+        if(/\b(out-file|add-content|set-content|export-)/i.test(st.text)){
+          const s = firstString(st.text) || (st.text.match(/-Path\s+(\S+)/i) || [])[1] || '';
+          return 'protokolliert in eine Datei' + (s ? ' (' + s + ')' : '');
+        }
+        const s = firstString(st.text);
+        return 'gibt ' + (s ? '«' + s + '»' : 'Text') + ' aus';
+      }
+      if(st.calls && st.calls.length) return 'ruft die Funktion «' + st.calls.join('», «') + '» auf';
+      return null;
+    case 'if':
+      return 'prüft, ob ' + simpleCond(st.branches[0].cond) +
+        ((st.elseBody || st.branches.length > 1) ? ' – und verzweigt entsprechend' : '');
+    case 'foreach': {
+      const m = st.header.match(/^(\$\w+)\s+in\s+(.+)$/i);
+      return 'wiederholt Schritte für ' + (m ? 'jedes ' + m[1] + ' aus ' + m[2] : 'jedes Element') +
+        (depth === 0 ? innerSteps(st.body) : '');
+    }
+    case 'while':  return 'wiederholt Schritte, solange ' + simpleCond(st.cond) + (depth === 0 ? innerSteps(st.body) : '');
+    case 'doloop': return 'wiederholt Schritte, ' + (st.kind === 'until' ? 'bis ' : 'solange ') + simpleCond(st.cond) + (depth === 0 ? innerSteps(st.body) : '');
+    case 'for':    return 'führt eine Zählschleife aus (' + st.header + ')' + (depth === 0 ? innerSteps(st.body) : '');
+    case 'switch': return 'unterscheidet nach ' + st.subject + ' zwischen ' + (st.cases.length + (st.defaultBody ? 1 : 0)) + ' Fällen';
+    case 'try':    return 'sichert Schritte mit einer Fehlerbehandlung (try/catch) ab' + (depth === 0 ? innerSteps(st.body) : '');
+    default: return null;
+  }
+}
+function joinGerman(a){ return a.length === 1 ? a[0] : a.slice(0, -1).join(', ') + ' und ' + a[a.length - 1]; }
+function describeScript(){
+  if(!lastParse) return [];
+  const s = lastParse.script;
+  const rows = [];
+  if(commentInfo.title) rows.push('Zweck: ' + commentInfo.title);
+  if(s.paramText) rows.push('Parameter: ' + s.paramText);
+  const steps = [];
+  for(const st of s.body){
+    const x = sentenceFor(st, 0);
+    if(x) steps.push(x);
+    if(steps.length >= 6){ steps.push('…'); break; }
+  }
+  if(steps.length) rows.push('Ablauf: Das Script ' + joinGerman(steps) + '.');
+  if((s.functions || []).length)
+    rows.push('Funktionen: ' + s.functions.map(f =>
+      '«' + f.name + '»' + (commentInfo.map[f.line] ? ' (' + commentInfo.map[f.line] + ')' : '')).join(', ') + '.');
+  return rows;
+}
+
+/* ===================== Einfach-Modus: AST verständlich machen ===================== */
+const CMDLET_DE = {
+  'copy-item':'Kopieren','remove-item':'Löschen','move-item':'Verschieben','new-item':'Erstellen',
+  'rename-item':'Umbenennen','get-childitem':'Dateien auflisten','get-item':'Datei/Ordner holen',
+  'get-service':'Dienste abfragen','get-process':'Prozesse abfragen','get-date':'Datum/Zeit holen',
+  'get-content':'Datei lesen','start-service':'Dienst starten','stop-service':'Dienst stoppen',
+  'restart-service':'Dienst neu starten','restart-computer':'Neustart','test-path':'Pfad prüfen',
+  'start-sleep':'Warten','clear-host':'Bildschirm leeren','set-location':'Ordner wechseln',
+  'invoke-webrequest':'Webseite abrufen','test-connection':'Ping','compress-archive':'ZIP erstellen',
+  'expand-archive':'ZIP entpacken','start-process':'Programm starten','stop-process':'Prozess beenden'
+};
+const OPS_DE = [
+  [/\s-eq\s/gi,' = '],[/\s-ne\s/gi,' ≠ '],[/\s-gt\s/gi,' > '],[/\s-ge\s/gi,' ≥ '],
+  [/\s-lt\s/gi,' < '],[/\s-le\s/gi,' ≤ '],[/\s-and\s/gi,' und '],[/\s-or\s/gi,' oder '],
+  [/\s-not\s/gi,' nicht '],[/!\s*/g,'nicht '],[/\s-match\s/gi,' entspricht '],
+  [/\s-like\s/gi,' wie '],[/\s-contains\s/gi,' enthält ']
+];
+function firstString(t){
+  const m = t.match(/"((?:""|`"|[^"])*)"|'((?:''|[^'])*)'/);
+  return m ? (m[1] !== undefined ? m[1] : m[2]) : null;
+}
+function simpleCond(c){
+  let t = ' ' + c + ' ';
+  OPS_DE.forEach(([r,s]) => t = t.replace(r,s));
+  t = t.trim();
+  let m = t.match(/^Test-Path\s+(.+)$/i);      if(m) return m[1].trim() + ' vorhanden?';
+  m = t.match(/^nicht \(?\s*Test-Path\s+([^)]+)\)?$/i); if(m) return m[1].trim() + ' fehlt?';
+  return t;
+}
+function simpleProcess(st){
+  const t = st.text;
+  let m;
+  if(st.io === 'input'){
+    const v = (t.match(/^(\$\w+)\s*=/) || [])[1];
+    const s = firstString(t);
+    return (s ? 'Eingabe: "' + s + '"' : 'Eingabe') + (v ? ' → ' + v : '');
+  }
+  if(st.io === 'output'){
+    if(/\b(out-file|add-content|set-content|export-csv|export-clixml)\b/i.test(t)){
+      const s = firstString(t) || (t.match(/-Path\s+(\S+)/i) || [])[1] || '';
+      return 'In Datei schreiben' + (s ? ': ' + s : '');
+    }
+    const s = firstString(t);
+    if(s !== null) return 'Ausgabe: "' + s + '"';
+    m = t.match(/^(?:write-(?:host|output|warning|error)|echo)\s+(.*)$/i);
+    return 'Ausgabe: ' + (m ? m[1] : t);
+  }
+  if(st.calls && st.calls.length) return 'Funktion: ' + st.calls.join(', ');
+  m = t.match(/^(\$\w+)\s*=\s*\1\s*([+\-])\s*(\S+)$/);
+  if(m) return m[1] + ' um ' + m[3] + (m[2] === '+' ? ' erhöhen' : ' verringern');
+  m = t.match(/^(\$\w+)\s*([+\-])=\s*(\S+)$/);
+  if(m) return m[1] + ' um ' + m[3] + (m[2] === '+' ? ' erhöhen' : ' verringern');
+  m = t.match(/^(\$\w+)\s*=\s*([A-Za-z]\w*-[A-Za-z]\w*)\b(.*)$/);
+  if(m && CMDLET_DE[m[2].toLowerCase()])
+    return m[1] + ' = ' + CMDLET_DE[m[2].toLowerCase()] + (m[3].includes('|') ? ' (gefiltert)' : '');
+  m = t.match(/^([A-Za-z]\w*-[A-Za-z]\w*)\b(.*)$/);
+  if(m && CMDLET_DE[m[1].toLowerCase()]){
+    const rest = m[2].trim();
+    const s = firstString(rest) || (rest.split(/\s+/)[0] || '').replace(/^-.*$/, '');
+    return CMDLET_DE[m[1].toLowerCase()] + (s ? ': ' + (s.startsWith('$') ? s : '"' + s + '"') : '');
+  }
+  m = t.match(/^(\$\w+)\s*=\s*(.{30,})$/);
+  if(m) return m[1] + ' berechnen';
+  return t;
+}
+function simpleJump(st){
+  const s = { ...st };
+  switch(st.kind){
+    case 'break':    s.text = 'Schleife abbrechen'; break;
+    case 'continue': s.text = 'nächster Durchlauf'; break;
+    case 'exit':     s.text = 'Script beenden'; break;
+    case 'throw':  { const f = firstString(st.text); s.text = 'Fehler melden' + (f ? ': "' + f + '"' : ''); break; }
+    case 'return': { const r = st.text.replace(/^return\s*/i, '').trim(); s.text = r ? 'Rückgabe: ' + r : 'zurück'; break; }
+  }
+  return s;
+}
+function mergeRuns(list){
+  const res = [];
+  let i = 0;
+  const boring = x => x.type === 'process' && !x.io && (!x.calls || !x.calls.length);
+  while(i < list.length){
+    const st = list[i];
+    if(boring(st)){
+      let j = i; while(j < list.length && boring(list[j])) j++;
+      if(j - i >= 3){ res.push({ ...st, text: list.slice(i, j).map(x => x.text).join(' · ') }); i = j; continue; }
+    }
+    if(st.type === 'process' && st.io === 'output'){
+      let j = i; while(j < list.length && list[j].type === 'process' && list[j].io === 'output') j++;
+      if(j - i >= 2){ res.push({ ...st, text: st.text + ' (+' + (j - i - 1) + ' weitere)' }); i = j; continue; }
+    }
+    res.push(st); i++;
+  }
+  return res;
+}
+function simplifyBody(body){
+  if(!body) return body;
+  const q = s => /[?]$/.test(s) ? s : s + '?';
+  const ifCond = c => { const t = simpleCond(c); return /[=<>≥≤≠]/.test(t) && !/[?]$/.test(t) ? 'Ist ' + t + '?' : t; };
+  const out = body.map(st => {
+    const cm = commentInfo.map[st.line];
+    switch(st.type){
+      case 'process': return { ...st, text: cm || simpleProcess(st) };
+      case 'jump':    return simpleJump(st);
+      case 'if':      return { ...st, branches: st.branches.map((b, i) => ({ cond: (i === 0 && cm) ? q(cm) : ifCond(b.cond), body: simplifyBody(b.body) })), elseBody: simplifyBody(st.elseBody) };
+      case 'switch':  return { ...st, cases: st.cases.map(c => ({ label: c.label, body: simplifyBody(c.body) })), defaultBody: simplifyBody(st.defaultBody) };
+      case 'while':   return { ...st, cond: simpleCond(st.cond), body: simplifyBody(st.body) };
+      case 'doloop':  return { ...st, cond: simpleCond(st.cond), body: simplifyBody(st.body) };
+      case 'for':     return { ...st, body: simplifyBody(st.body) };
+      case 'foreach': return { ...st, header: st.header.replace(/^(\$\w+)\s+in\s+/i, 'jedes $1 aus '), body: simplifyBody(st.body) };
+      case 'try':     return { ...st, body: simplifyBody(st.body), catches: st.catches.map(c => ({ label: c.label, body: simplifyBody(c.body) })), finallyBody: simplifyBody(st.finallyBody) };
+      default: return st;
+    }
+  });
+  return mergeRuns(out);
+}
+
+/* ===================== Rebuild-Pipeline ===================== */
+let debTimer = null;
+function onEdit(){
+  refreshEditorChrome();
+  LS.set('code', code.value);
+  clearTimeout(debTimer);
+  debTimer = setTimeout(rebuild, 250);
+}
+code.addEventListener('input', onEdit);
+captionInp.addEventListener('input', () => LS.set('caption', captionInp.value));
+
+function moduleCheck(){
+  const missing = [];
+  if(!window.PSViz || !PSViz.parse) missing.push('parser');
+  if(!window.PSViz || !PSViz.renderFlowchart) missing.push('flowchart');
+  if(!window.PSViz || !PSViz.renderStruktogramm) missing.push('struktogramm');
+  if(!window.PSViz || !PSViz.toMermaid) missing.push('mermaid');
+  return missing;
+}
+
+function rebuild(){
+  const missing = moduleCheck();
+  if(missing.length){
+    view.innerHTML = '<div id="emptyMsg">Module fehlen noch: '+missing.join(', ')+'<br>(js/-Ordner unvollständig)</div>';
+    return;
+  }
+  const src = code.value;
+  if(!src.trim()){
+    lastParse = null;
+    view.innerHTML = '<div id="emptyMsg">Füge links ein PowerShell-Script ein –<br>oder wähle oben ein Beispiel aus.</div>';
+    statsEl.textContent = ''; warnBadge.style.display = 'none';
+    return;
+  }
+  let res;
+  try{ res = PSViz.parse(src); }
+  catch(err){
+    view.innerHTML = '<div id="emptyMsg">Parser-Fehler: '+esc(String(err.message||err))+'</div>';
+    return;
+  }
+  lastParse = res;
+  commentInfo = extractComments(src);
+  renderStats(res);
+  renderView();
+}
+
+function charts(){
+  if(!lastParse) return [];
+  const s = lastParse.script;
+  const T = b => mode === 'einfach' ? simplifyBody(b) : b;
+  const out = [{ name:'Hauptablauf', startTitle:'Start', body: T(s.body), paramText: s.paramText, isMain:true }];
+  for(const f of (s.functions||[])){
+    out.push({ name:'Funktion: '+f.name, startTitle:'Start: '+f.name, body:T(f.body), paramText:f.paramText, isMain:false });
+  }
+  return out;
+}
+
+function renderStats(res){
+  let proc=0, dec=0, loop=0, io=0;
+  (function walk(body){
+    if(!body) return;
+    for(const st of body){
+      switch(st.type){
+        case 'process': proc++; if(st.io) io++; break;
+        case 'if': dec++; st.branches.forEach(b=>walk(b.body)); if(st.branches.length>1) dec += st.branches.length-1; walk(st.elseBody); break;
+        case 'switch': dec++; st.cases.forEach(c=>walk(c.body)); walk(st.defaultBody); break;
+        case 'while': case 'doloop': case 'for': case 'foreach': loop++; walk(st.body); break;
+        case 'try': walk(st.body); st.catches.forEach(c=>walk(c.body)); walk(st.finallyBody); break;
+      }
+    }
+  })(res.script.body);
+  (res.script.functions||[]).forEach(f=>{ (function walk2(b){ if(!b)return; for(const st of b){
+      if(st.type==='process'){proc++; if(st.io)io++;}
+      else if(st.type==='if'){dec+=st.branches.length; st.branches.forEach(x=>walk2(x.body)); walk2(st.elseBody);}
+      else if(st.type==='switch'){dec++; st.cases.forEach(c=>walk2(c.body)); walk2(st.defaultBody);}
+      else if(['while','doloop','for','foreach'].includes(st.type)){loop++; walk2(st.body);}
+      else if(st.type==='try'){walk2(st.body); st.catches.forEach(c=>walk2(c.body)); walk2(st.finallyBody);}
+  }})(f.body); });
+  const fns = (res.script.functions||[]).length;
+  statsEl.textContent = `${proc} Anweisungen · ${dec} Entscheidungen · ${loop} Schleifen · ${io} Ein-/Ausgaben · ${fns} Funktionen`;
+  const w = res.warnings||[];
+  if(w.length){
+    warnBadge.style.display = 'inline-block';
+    warnBadge.textContent = '⚠ '+w[0].message+(w[0].line?' (Zeile '+w[0].line+')':'')+(w.length>1? ' · +'+(w.length-1)+' weitere':'');
+    warnBadge.title = w.map(x=>x.message+(x.line?' (Zeile '+x.line+')':'')).join('\n');
+  } else warnBadge.style.display = 'none';
+}
+
+/* ===================== Ansichten ===================== */
+function renderView(){
+  if(!lastParse){ rebuild(); return; }
+  if(activeTab === 'mermaid') renderMermaidTab();
+  else renderDiagramTab(activeTab);
+  applyZoom();
+}
+
+function renderDiagramTab(kind){
+  const list = charts();
+  view.innerHTML = '';
+  const rows = describeScript();
+  if(rows.length){
+    const dc = document.createElement('div');
+    dc.className = 'mmcard';
+    dc.innerHTML =
+      '<div class="cardHead"><span class="name">📝 Was macht dieses Script?</span>'+
+      '<span class="param">automatisch erstellt – als Einleitung für die Doku</span><span class="grow"></span>'+
+      '<button class="mini" data-act="copydesc">Text kopieren</button></div>'+
+      '<div class="descBody"><ul>'+rows.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul></div>';
+    dc.querySelector('[data-act=copydesc]').onclick = async () => {
+      try{ await navigator.clipboard.writeText(rows.join('\n')); toast('Beschreibung kopiert ✓'); }
+      catch(e){ toast('Kopieren fehlgeschlagen'); }
+    };
+    view.appendChild(dc);
+  }
+  for(const c of list){
+    let r;
+    try{
+      r = kind==='flow'
+        ? PSViz.renderFlowchart(c.body, { title: c.startTitle })
+        : PSViz.renderStruktogramm(c.body, { title: c.isMain ? (captionInp.value.trim() || 'Ablauf') : c.name });
+    }catch(err){
+      r = { svg:'<svg xmlns="http://www.w3.org/2000/svg" width="400" height="40"><text x="10" y="25" fill="#b00">Renderfehler: '+esc(String(err.message||err))+'</text></svg>', width:400, height:40 };
+    }
+    const card = document.createElement('div');
+    card.className = 'chartcard';
+    const pt = c.paramText ? '<span class="param" title="'+esc(c.paramText)+'">param( '+esc(c.paramText)+' )</span>' : '';
+    const mchip = mode === 'einfach' ? '<span class="param">vereinfachte Darstellung</span>' : '';
+    card.innerHTML =
+      '<div class="cardHead"><span class="name">'+esc(c.name)+'</span>'+pt+mchip+'<span class="grow"></span>'+
+      '<button class="mini" data-act="png">PNG ↓</button> <button class="mini" data-act="svg">SVG ↓</button></div>'+
+      '<div class="cardBody"></div>';
+    card.querySelector('.cardBody').innerHTML = r.svg;
+    card.querySelector('[data-act=png]').onclick = () => exportPNG(r, c.name);
+    card.querySelector('[data-act=svg]').onclick = () => exportSVG(r, c.name);
+    view.appendChild(card);
+  }
+  if(!userZoomed) fitZoom();
+}
+
+function renderMermaidTab(){
+  const list = charts();
+  view.innerHTML =
+    '<div class="hintbox blue"><b>Bearbeitbare Darstellung:</b> Diesen Code kannst du in <b>draw.io</b> importieren '+
+    '(Extras → Einfügen → Erweitert → Mermaid), auf <b>mermaid.live</b> öffnen oder in Markdown/Obsidian/GitLab als '+
+    '<code>```mermaid</code>-Block einbetten. Wenn sich dein Script ändert: hier neu kopieren – fertig.</div>';
+  for(const c of list){
+    let txt;
+    try{ txt = PSViz.toMermaid(c.body, { title: c.startTitle }); }
+    catch(err){ txt = '%% Fehler: '+String(err.message||err); }
+    const el = document.createElement('div');
+    el.className = 'mmcard';
+    el.innerHTML =
+      '<div class="cardHead"><span class="name">'+esc(c.name)+'</span><span class="grow"></span>'+
+      '<button class="mini" data-act="copy">Kopieren</button></div><pre></pre>';
+    el.querySelector('pre').textContent = txt;
+    el.querySelector('[data-act=copy]').onclick = async () => {
+      try{ await navigator.clipboard.writeText(txt); toast('Mermaid-Code kopiert ✓'); }
+      catch(e){
+        const p = el.querySelector('pre'); const rge = document.createRange(); rge.selectNodeContents(p);
+        const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rge);
+        document.execCommand('copy'); toast('Kopiert ✓');
+      }
+    };
+    view.appendChild(el);
+  }
+}
+
+/* ===================== Zoom ===================== */
+function applyZoom(){
+  view.querySelectorAll('.cardBody svg').forEach(svg => {
+    const w = parseFloat(svg.getAttribute('width')) || svg.viewBox?.baseVal?.width || 0;
+    if(w) svg.style.width = (w*zoom)+'px';
+    svg.style.height = 'auto';
+  });
+  $('zoomVal').textContent = Math.round(zoom*100)+'%';
+}
+function fitZoom(){
+  const svgs = [...view.querySelectorAll('.cardBody svg')];
+  if(!svgs.length) return;
+  const maxW = Math.max(...svgs.map(s => parseFloat(s.getAttribute('width'))||0));
+  const avail = view.clientWidth - 80;
+  zoom = Math.min(1.15, Math.max(0.25, avail/maxW));
+  applyZoom();
+}
+$('zoomIn').onclick  = () => { zoom = Math.min(3, zoom*1.2); userZoomed = true; applyZoom(); };
+$('zoomOut').onclick = () => { zoom = Math.max(0.2, zoom/1.2); userZoomed = true; applyZoom(); };
+$('zoomFit').onclick = () => { userZoomed = false; fitZoom(); };
+view.addEventListener('wheel', e => {
+  if(!(e.metaKey || e.ctrlKey)) return;
+  e.preventDefault();
+  zoom = Math.min(3, Math.max(0.2, zoom * (e.deltaY < 0 ? 1.1 : 0.9)));
+  userZoomed = true; applyZoom();
+}, { passive:false });
+
+/* ===================== Export ===================== */
+function withCaption(svgStr, w, h){
+  const cap = captionInp.value.trim();
+  if(!cap) return { svg: svgStr, w, h };
+  const inner = svgStr.replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+  const H = h + 42;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif">`+
+    `<rect x="0" y="0" width="${w}" height="${H}" fill="#ffffff"/>`+
+    `<text x="${w/2}" y="26" text-anchor="middle" font-size="15" font-weight="bold" fill="#1d1d1f">${esc(cap)}</text>`+
+    `<g transform="translate(0,42)">${inner}</g></svg>`;
+  return { svg, w, h: H };
+}
+function slug(s){ return s.toLowerCase().replace(/[^a-z0-9äöü]+/gi,'-').replace(/^-+|-+$/g,'') || 'diagramm'; }
+function download(blob, name){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function exportSVG(r, name){
+  const { svg } = withCaption(r.svg, r.width, r.height);
+  download(new Blob([svg], {type:'image/svg+xml'}), 'scriptflow-'+slug(name)+'.svg');
+  toast('SVG gespeichert ✓');
+}
+function exportPNG(r, name){
+  const { svg, w, h } = withCaption(r.svg, r.width, r.height);
+  const img = new Image();
+  const SCALE = 2;
+  img.onload = () => {
+    const cv = document.createElement('canvas');
+    cv.width = w*SCALE; cv.height = h*SCALE;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    cv.toBlob(b => { download(b, 'scriptflow-'+slug(name)+'.png'); toast('PNG gespeichert ✓ (2×-Auflösung)'); }, 'image/png');
+  };
+  img.onerror = () => toast('PNG-Export fehlgeschlagen');
+  img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+}
+
+/* ===================== Legende ===================== */
+const LEGEND_SVG = (() => {
+  const F = `font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#1d1d1f"`;
+  const S = 'stroke="#3a3a3c" stroke-width="1.3"';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="660" height="196" viewBox="0 0 660 196">
+  <rect width="660" height="196" fill="#ffffff"/>
+  <text x="14" y="22" ${F} font-weight="bold" font-size="14">Legende – Flussdiagramm-Symbole (DIN 66001)</text>
+  <rect x="16" y="38" width="92" height="30" rx="15" fill="#e9f7ef" ${S}/><text x="62" y="57" text-anchor="middle" ${F}>Start</text>
+  <text x="122" y="57" ${F}>Start / Ende (Terminator)</text>
+  <rect x="16" y="78" width="92" height="30" rx="4" fill="#ffffff" ${S}/><text x="62" y="97" text-anchor="middle" ${F}>Prozess</text>
+  <text x="122" y="97" ${F}>Anweisung / Verarbeitung</text>
+  <polygon points="62,116 116,133 62,150 8,133" fill="#fff6e5" ${S}/><text x="62" y="137" text-anchor="middle" ${F}>Frage?</text>
+  <text x="122" y="137" ${F}>Entscheidung – Ja/Nein</text>
+  <polygon points="26,158 116,158 106,188 16,188" fill="#eaf2ff" ${S}/><text x="66" y="177" text-anchor="middle" ${F}>E/A</text>
+  <text x="122" y="177" ${F}>Ein-/Ausgabe (Read-Host, Write-Host …)</text>
+  <polygon points="392,42 452,42 464,57 452,72 392,72 380,57" fill="#f4edfb" ${S}/><text x="422" y="61" text-anchor="middle" ${F}>Schleife</text>
+  <text x="476" y="61" ${F}>for / foreach</text>
+  <rect x="380" y="82" width="84" height="30" rx="3" fill="#ffffff" ${S}/>
+  <line x1="387" y1="82" x2="387" y2="112" ${S}/><line x1="457" y1="82" x2="457" y2="112" ${S}/>
+  <text x="422" y="101" text-anchor="middle" ${F}>Funktion</text>
+  <text x="476" y="101" ${F}>Funktionsaufruf</text>
+  <rect x="380" y="122" width="84" height="30" rx="8" fill="none" stroke="#ff9f0a" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <text x="422" y="141" text-anchor="middle" ${F}>try/catch</text>
+  <text x="476" y="141" ${F}>Fehlerbehandlung</text>
+</svg>`;
+})();
+$('legendWrap').innerHTML = LEGEND_SVG;
+$('legendPngBtn').onclick = () => exportPNG({ svg: LEGEND_SVG, width:660, height:196 }, 'legende');
+
+/* ===================== UI-Verkabelung ===================== */
+document.querySelectorAll('.modeBtn').forEach(b => b.onclick = () => {
+  mode = b.dataset.mode;
+  LS.set('mode', mode);
+  document.querySelectorAll('.modeBtn').forEach(x => x.classList.toggle('active', x.dataset.mode === mode));
+  userZoomed = false;
+  renderView();
+});
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  activeTab = t.dataset.tab;
+  LS.set('tab', activeTab);
+  renderView();
+});
+$('exampleSel').onchange = e => {
+  const v = e.target.value; e.target.value = '';
+  if(!v) return;
+  const isExample = Object.values(EXAMPLES).includes(code.value.trim()) || !code.value.trim();
+  if(!isExample && !confirm('Aktuelles Script ersetzen?')) return;
+  code.value = v==='blank' ? '' : EXAMPLES[v];
+  userZoomed = false;
+  onEdit();
+};
+$('themeBtn').onclick = () => {
+  const cur = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.body.dataset.theme = cur; LS.set('theme', cur);
+};
+$('helpBtn').onclick = () => $('helpDlg').showModal();
+let toastTimer;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+window.addEventListener('resize', () => { if(!userZoomed) fitZoom(); });
+
+/* ===================== Init ===================== */
+document.body.dataset.theme = LS.get('theme','dark');
+mode = LS.get('mode','detail');
+document.querySelectorAll('.modeBtn').forEach(x => x.classList.toggle('active', x.dataset.mode === mode));
+activeTab = LS.get('tab','flow');
+document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab===activeTab));
+captionInp.value = LS.get('caption','');
+code.value = LS.get('code', EXAMPLES.ex1);
+refreshEditorChrome();
+rebuild();
+</script>
+</body>
+</html>

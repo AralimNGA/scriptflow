@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>ScriptFlow — Flowchart-Fixtures (visuelle Prüfung)</title>
+<style>
+  body {
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    margin: 0; padding: 24px 32px 64px;
+    background: #f2f2f7; color: #1d1d1f;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.hint { color: #6e6e73; margin: 0 0 28px; font-size: 13px; }
+  section { margin-bottom: 40px; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  h2 .dim { color: #6e6e73; font-weight: 400; font-size: 12px; margin-left: 8px; }
+  .frame {
+    display: inline-block; background: #ffffff;
+    border: 1px solid #d2d2d7; border-radius: 10px;
+    overflow: auto; max-width: 100%;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .frame svg { display: block; }
+  .err { color: #d70015; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>ScriptFlow — Flowchart-Fixtures</h1>
+<p class="hint">Handgebaute AST-Fixtures gemäss CONTRACT.md, gerendert mit js/flowchart.js.
+Klick-Gruppen (<code>g.nd</code>) tragen <code>data-line</code>.</p>
+<div id="root"></div>
+
+<script src="../js/flowchart.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  function P(text, line, io, calls) {
+    return { type: 'process', text: text, io: io || null, calls: calls || [], line: line };
+  }
+  function J(kind, text, line) {
+    return { type: 'jump', kind: kind, text: text, line: line };
+  }
+
+  var fixtures = [
+    {
+      name: '1) Einfaches if/else',
+      title: 'Zahl prüfen',
+      body: [
+        P('$zahl = Read-Host "Gib eine Zahl ein"', 1, 'input'),
+        {
+          type: 'if', line: 2,
+          branches: [{ cond: '$zahl -gt 10', body: [P('Write-Host "gross"', 3, 'output')] }],
+          elseBody: [P('Write-Host "klein"', 5, 'output')]
+        },
+        P('Write-Host "geprüft"', 7, 'output')
+      ]
+    },
+    {
+      name: '2) foreach mit verschachteltem if',
+      title: 'Dateien sichern',
+      body: [
+        {
+          type: 'foreach', header: '$datei in $dateien', line: 1,
+          body: [
+            {
+              type: 'if', line: 2,
+              branches: [{ cond: '$datei.Length -gt 1MB', body: [P('Copy-Item $datei $archiv', 3)] }],
+              elseBody: [P('Copy-Item $datei $ziel', 5)]
+            },
+            P('$anzahl = $anzahl + 1', 7)
+          ]
+        },
+        P('Write-Host "$anzahl Dateien kopiert"', 9, 'output')
+      ]
+    },
+    {
+      name: '3) while mit break',
+      title: 'Warteschleife',
+      body: [
+        {
+          type: 'while', cond: '$true', line: 1,
+          body: [
+            P('Start-Sleep 1', 2),
+            {
+              type: 'if', line: 3,
+              branches: [{ cond: 'Test-Path stop.txt', body: [J('break', 'break', 4)] }],
+              elseBody: null
+            },
+            P('Write-Host "warte weiter"', 6, 'output')
+          ]
+        },
+        P('Write-Host "Schleife beendet"', 8, 'output')
+      ]
+    },
+    {
+      name: '4) do-until mit switch (3 Fälle + Sonst)',
+      title: 'Menü',
+      body: [
+        {
+          type: 'doloop', kind: 'until', cond: '$wahl -eq 4', line: 1,
+          body: [
+            P('$wahl = Read-Host "Menüpunkt wählen"', 2, 'input'),
+            {
+              type: 'switch', subject: '$wahl', line: 3,
+              cases: [
+                { label: '1', body: [P('Zeige-Status', 4, null, ['Zeige-Status'])] },
+                { label: '2', body: [P('Starte-Backup', 5, null, ['Starte-Backup'])] },
+                { label: '3', body: [P('Write-Host "Version 1.0"', 6, 'output')] }
+              ],
+              defaultBody: [P('Write-Host "Unbekannte Wahl"', 7, 'output')]
+            }
+          ]
+        },
+        P('Write-Host "Auf Wiedersehen"', 9, 'output')
+      ]
+    },
+    {
+      name: '5) try / catch / finally',
+      title: 'Datei lesen',
+      body: [
+        {
+          type: 'try', line: 1,
+          body: [
+            P('$inhalt = Get-Content daten.txt', 2),
+            P('Write-Host $inhalt', 3, 'output')
+          ],
+          catches: [
+            { label: 'IOException', body: [P('Write-Host "Lesefehler"', 5, 'output')] },
+            { label: 'Fehler', body: [P('Write-Host "Anderer Fehler"', 7, 'output')] }
+          ],
+          finallyBody: [P('Write-Host "Aufgeräumt"', 9, 'output')]
+        }
+      ]
+    },
+    {
+      name: '6) if / elseif / else Kaskade',
+      title: 'Note bewerten',
+      body: [
+        {
+          type: 'if', line: 1,
+          branches: [
+            { cond: '$note -ge 5.5', body: [P('Write-Host "sehr gut"', 2, 'output')] },
+            { cond: '$note -ge 4.5', body: [P('Write-Host "gut"', 4, 'output')] },
+            { cond: '$note -ge 4', body: [P('Write-Host "genügend"', 6, 'output')] }
+          ],
+          elseBody: [P('Write-Host "ungenügend"', 8, 'output')]
+        }
+      ]
+    },
+    {
+      name: '7) Funktionsartiger Ablauf: Aufrufe + Ein-/Ausgabe + return',
+      title: 'Hauptprogramm',
+      body: [
+        P('$name = Read-Host "Servername"', 1, 'input'),
+        P('$ok = Teste-Server $name', 2, null, ['Teste-Server']),
+        {
+          type: 'if', line: 3,
+          branches: [{ cond: '$ok -eq $false', body: [J('return', 'return "abgebrochen"', 4)] }],
+          elseBody: null
+        },
+        P('Sichere-Server $name', 6, null, ['Sichere-Server']),
+        P('$bericht | Out-File bericht.txt', 7, 'output')
+      ]
+    },
+    {
+      name: '8) Leerer Body (nur Start und Ende)',
+      title: 'Start',
+      body: []
+    }
+  ];
+
+  var root = document.getElementById('root');
+  fixtures.forEach(function (fx) {
+    var section = document.createElement('section');
+    var h2 = document.createElement('h2');
+    var frame = document.createElement('div');
+    frame.className = 'frame';
+    try {
+      var res = window.PSViz.renderFlowchart(fx.body, { title: fx.title });
+      h2.innerHTML = fx.name + '<span class="dim">' + res.width + '&times;' + res.height + ' px</span>';
+      frame.innerHTML = res.svg;
+    } catch (e) {
+      h2.textContent = fx.name;
+      frame.innerHTML = '<p class="err">Renderfehler: ' + String(e && e.message || e) + '</p>';
+    }
+    section.appendChild(h2);
+    section.appendChild(frame);
+    root.appendChild(section);
+  });
+
+  // kleine Klick-Demo für die App-Shell-Integration: data-line -> console
+  root.addEventListener('click', function (ev) {
+    var g = ev.target.closest ? ev.target.closest('g.nd') : null;
+    if (g) console.log('Klick auf Knoten, Quellzeile:', g.getAttribute('data-line'));
+  });
+})();
+</script>
+</body>
+</html>

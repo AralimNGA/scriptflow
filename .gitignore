@@ -1,0 +1,15 @@
+# Build output (node build.js) - attach dist/ScriptFlow.html to a release instead
+dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node (not needed, but in case someone runs npm in here)
+node_modules/
+
+# Local secrets (none are used by this project)
+.env
+.env.*

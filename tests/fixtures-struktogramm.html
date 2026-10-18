@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ScriptFlow — Struktogramm-Fixtures (visuelle Kontrolle)</title>
+<style>
+  body {
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    margin: 24px;
+    background: #f5f5f7;
+    color: #1d1d1f;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  p.hint { color: #6e6e73; margin-top: 0; }
+  section.fx {
+    background: #ffffff;
+    border: 1px solid #d2d2d7;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 0 0 28px 0;
+    overflow-x: auto;
+  }
+  section.fx h2 { font-size: 15px; margin: 0 0 12px 0; }
+  section.fx svg { display: block; }
+  #err { color: #b00020; font-weight: bold; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Struktogramm — visuelle Fixtures</h1>
+<p class="hint">Diese Seite darf das DOM anfassen; das Modul selbst (../js/struktogramm.js) nicht.
+Handgebaute AST-Fixtures gemäss CONTRACT.md.</p>
+<div id="err"></div>
+<div id="root"></div>
+
+<script src="../js/struktogramm.js"></script>
+<script>
+'use strict';
+(function () {
+  // Fixture-Helfer (AST von Hand, gemaess Contract)
+  const P = (text, line, io, calls) =>
+    ({ type: 'process', text, io: io || null, calls: calls || [], line });
+  const J = (kind, text, line) => ({ type: 'jump', kind, text, line });
+
+  const fixtures = [
+    {
+      name: '1) Sequenz mit E/A-Zellen und Unterprogramm-Aufruf',
+      title: 'Begrüssung',
+      body: [
+        P('$name = Read-Host "Wie heisst du?"', 2, 'input'),
+        P('$gruss = "Hallo, $name!"', 3),
+        P('Schreibe-Log -Nachricht $gruss', 4, null, ['Schreibe-Log']),
+        P('Write-Host $gruss -ForegroundColor Green', 5, 'output'),
+        P('Set-Content -Path C:\\temp\\protokoll.txt -Value $gruss -Encoding UTF8', 6, 'output')
+      ]
+    },
+    {
+      name: '2) if / else',
+      title: 'Zahlprüfung',
+      body: [
+        P('$zahl = Read-Host "Zahl eingeben"', 2, 'input'),
+        {
+          type: 'if', line: 3,
+          branches: [
+            { cond: '$zahl % 2 -eq 0', body: [P('Write-Host "gerade"', 4, 'output')] }
+          ],
+          elseBody: [P('Write-Host "ungerade"', 6, 'output')]
+        }
+      ]
+    },
+    {
+      name: '3) if / elseif / elseif / else — Kaskade',
+      title: 'Notenbewertung',
+      body: [
+        {
+          type: 'if', line: 2,
+          branches: [
+            { cond: '$note -ge 5.5', body: [P('Write-Host "sehr gut"', 3, 'output')] },
+            { cond: '$note -ge 4.75', body: [P('Write-Host "gut"', 5, 'output')] },
+            { cond: '$note -ge 4.0', body: [P('Write-Host "genügend"', 7, 'output')] }
+          ],
+          elseBody: [
+            P('Write-Host "ungenügend"', 9, 'output'),
+            P('$wiederholen = $true', 10)
+          ]
+        }
+      ]
+    },
+    {
+      name: '4) while mit verschachteltem if (ohne else)',
+      title: 'Zähler',
+      body: [
+        P('$i = 0', 2),
+        {
+          type: 'while', cond: '$i -lt 10', line: 3,
+          body: [
+            {
+              type: 'if', line: 4,
+              branches: [
+                { cond: '$i % 3 -eq 0', body: [P('Write-Host "$i ist durch 3 teilbar"', 5, 'output')] }
+              ],
+              elseBody: null
+            },
+            P('$i++', 7)
+          ]
+        }
+      ]
+    },
+    {
+      name: "5) foreach mit verschachteltem doloop 'until'",
+      title: 'Server-Check',
+      body: [
+        {
+          type: 'foreach', header: '$server in $serverListe', line: 2,
+          body: [
+            P('Test-Connection $server -Count 1', 3),
+            {
+              type: 'doloop', kind: 'until', cond: '$antwort -eq "ok"', line: 4,
+              body: [
+                P('$antwort = Read-Host "Status für $server"', 5, 'input')
+              ]
+            },
+            P('Write-Host "$server bereit"', 8, 'output')
+          ]
+        }
+      ]
+    },
+    {
+      name: '6) switch mit 3 Fällen + Sonst',
+      title: 'Hauptmenü',
+      body: [
+        P('$wahl = Read-Host "Auswahl (1/2/ende)"', 2, 'input'),
+        {
+          type: 'switch', subject: '$wahl', line: 3,
+          cases: [
+            { label: '1', body: [P('Neu-Anlegen -Interaktiv', 4, null, ['Neu-Anlegen'])] },
+            { label: '2', body: [P('Write-Host "Liste folgt"', 5, 'output'), P('Get-ChildItem | Out-GridView', 6, 'output')] },
+            { label: '"ende"', body: [J('break', 'break', 7)] }
+          ],
+          defaultBody: [P('Write-Host "Ungültige Eingabe"', 9, 'output')]
+        }
+      ]
+    },
+    {
+      name: '7) try / 2× catch / finally',
+      title: 'Dateiverarbeitung',
+      body: [
+        {
+          type: 'try', line: 2,
+          body: [
+            P('$daten = Get-Content C:\\logs\\heute.log', 3),
+            P('$anzahl = ($daten | Measure-Object).Count', 4)
+          ],
+          catches: [
+            { label: 'System.IO.IOException', body: [P('Write-Host "Datei nicht lesbar"', 6, 'output')] },
+            { label: 'Fehler', body: [P('Write-Host "Unerwarteter Fehler"', 8, 'output'), J('throw', 'throw', 9)] }
+          ],
+          finallyBody: [P('Remove-Item $tmpDatei -ErrorAction SilentlyContinue', 11)]
+        },
+        J('return', 'return $anzahl', 13)
+      ]
+    },
+    {
+      name: '8) Leerer Body',
+      title: 'Leeres Skript',
+      body: []
+    }
+  ];
+
+  const root = document.getElementById('root');
+  const err = document.getElementById('err');
+
+  if (!window.PSViz || typeof window.PSViz.renderStruktogramm !== 'function') {
+    err.textContent = 'FEHLER: PSViz.renderStruktogramm wurde nicht geladen (../js/struktogramm.js prüfen).';
+    return;
+  }
+
+  for (const f of fixtures) {
+    const sec = document.createElement('section');
+    sec.className = 'fx';
+    const h = document.createElement('h2');
+    h.textContent = f.name;
+    sec.appendChild(h);
+    try {
+      const res = window.PSViz.renderStruktogramm(f.body, { title: f.title });
+      const holder = document.createElement('div');
+      holder.innerHTML = res.svg;
+      sec.appendChild(holder);
+      const meta = document.createElement('p');
+      meta.className = 'hint';
+      meta.textContent = res.width + ' × ' + res.height + ' px';
+      sec.appendChild(meta);
+    } catch (e) {
+      const msg = document.createElement('p');
+      msg.style.color = '#b00020';
+      msg.textContent = 'Render-Fehler: ' + e.message;
+      sec.appendChild(msg);
+    }
+    root.appendChild(sec);
+  }
+
+  // Demo der App-Shell-Integration: Klick auf eine Zelle zeigt die Quellzeile.
+  root.addEventListener('click', function (ev) {
+    const nd = ev.target.closest ? ev.target.closest('g.nd') : null;
+    if (nd) console.log('Klick auf Quellzeile:', nd.getAttribute('data-line'));
+  });
+})();
+</script>
+</body>
+</html>
